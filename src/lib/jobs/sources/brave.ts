@@ -20,6 +20,8 @@ interface GeographyMatch {
 }
 
 const GENERIC_TITLE = /^(empleos?|trabajos?|jobs?|vacantes?|careers?|ofertas?\s+de\s+(empleo|trabajo))\b/i;
+const GENERIC_LISTING = /\b(remote\s+)?(social\s+impact\s+)?jobs?\b|ofertas?\s+de\s+empleo|encuentra\s+ofertas|actualizadas?\s+diariamente/i;
+const EXCLUDED_ROLE = /^community manager\b/i;
 const REMOTE_FOR_CR = /\b(remote|remoto|worldwide|anywhere|latam|latin america|americas|central america)\b/i;
 const COSTA_RICA = /\b(costa rica|san jos[eé]|heredia|alajuela|cartago|escaz[uú]|santa ana)\b/i;
 const FOREIGN_ONLY = /\b(colombia|bogot[aá]|medell[ií]n|cali|venezuela|caracas|m[eé]xico|argentina|chile|per[uú]|ecuador|panam[aá])\b/i;
@@ -111,13 +113,23 @@ function extractCompany(title: string, fallback: string): string {
 }
 
 function isSpecificJob(url: string, title: string): boolean {
-  if (title.length < 8 || GENERIC_TITLE.test(title) || !isTargetTitle(title)) return false;
+  if (
+    title.length < 8
+    || GENERIC_TITLE.test(title)
+    || GENERIC_LISTING.test(title)
+    || EXCLUDED_ROLE.test(title)
+    || !isTargetTitle(title)
+  ) return false;
 
   try {
     const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
     const path = parsed.pathname.toLowerCase().replace(/\/+$/, "");
     const genericPaths = new Set(["", "/job", "/jobs", "/empleo", "/empleos", "/trabajo", "/trabajos", "/vacantes", "/careers", "/search"]);
-    return !genericPaths.has(path) && !/\/(search|buscar|ofertas-de-empleo)$/.test(path);
+    if (genericPaths.has(path) || /\/(search|buscar|ofertas-de-empleo)$/.test(path)) return false;
+    if (/theimpactjob\.com$/.test(host) && /^\/jobs\/(remote|category|search)/.test(path)) return false;
+    if (/trabajo\.org$/.test(host) && !/^\/oferta-/.test(path)) return false;
+    return true;
   } catch {
     return false;
   }
