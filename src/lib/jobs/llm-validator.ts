@@ -18,10 +18,9 @@ interface LlmDecisionEnvelope {
   decisions: LlmDecision[];
 }
 
-interface OpenAIResponse {
-  output_text?: string;
-  output?: Array<{
-    content?: Array<{ type?: string; text?: string }>;
+interface GeminiChatResponse {
+  choices?: Array<{
+    message?: { content?: string | null };
   }>;
   error?: { message?: string };
 }
@@ -33,7 +32,7 @@ export interface LlmValidationResult {
   model: string;
 }
 
-export async function validateBraveJobsWithLlm(
+export async function validateBraveJobsWithGemini(
   apiKey: string,
   jobs: JobOpportunity[],
   preferences: SearchPreferences,
@@ -43,7 +42,7 @@ export async function validateBraveJobsWithLlm(
   }
 
   const model = selectedModel();
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -51,10 +50,7 @@ export async function validateBraveJobsWithLlm(
     },
     body: JSON.stringify({
       model,
-      store: false,
-      reasoning: { effort: "none" },
-      max_output_tokens: 7_000,
-      input: [
+      messages: [
         {
           role: "system",
           content: buildSystemPrompt(preferences),
@@ -81,28 +77,30 @@ export async function validateBraveJobsWithLlm(
           }),
         },
       ],
-      text: {
-        format: {
-          type: "json_schema",
+      response_format: {
+        type: "json_schema",
+        json_schema: {
           name: "job_candidate_validation",
           description: "Valida candidatos de búsqueda web y calcula su compatibilidad laboral.",
           strict: true,
           schema: decisionSchema(jobs.map((job) => job.id)),
         },
       },
+      max_tokens: 7_000,
+      temperature: 0.1,
     }),
     signal: AbortSignal.timeout(30_000),
   });
 
-  const payload = (await response.json()) as OpenAIResponse;
+  const payload = (await response.json()) as GeminiChatResponse;
   if (!response.ok) {
-    throw new Error(payload.error?.message || `OpenAI respondió ${response.status}`);
+    throw new Error(payload.error?.message || `Gemini respondió ${response.status}`);
   }
 
-  const outputText = extractOutputText(payload);
+  const outputText = payload.choices?.[0]?.message?.content?.trim() ?? "";
   if (!outputText) throw new Error("La IA no devolvió una evaluación utilizable");
 
-  const parsed = JSON.parse(outputText) as LlmDecisionEnvelope;
+  const parsed = JSON.parse(stripMarkdownFence(outputText)) as LlmDecisionEnvelope;
   const decisions = new Map(parsed.decisions.map((decision) => [decision.id, decision]));
   const possibleFloor = Math.max(40, preferences.minimumScore - 15);
 
@@ -201,20 +199,15 @@ function decisionSchema(ids: string[]): Record<string, unknown> {
   };
 }
 
-function extractOutputText(payload: OpenAIResponse): string {
-  if (payload.output_text?.trim()) return payload.output_text;
-  for (const item of payload.output ?? []) {
-    for (const content of item.content ?? []) {
-      if ((content.type === "output_text" || content.type === "text") && content.text?.trim()) {
-        return content.text;
-      }
-    }
-  }
-  return "";
+function stripMarkdownFence(value: string): string {
+  return value
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
 }
 
 function selectedModel(): string {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-5.6-luna";
+  return process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
 }
 
 function clamp(value: number): number {
