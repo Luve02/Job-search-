@@ -9,7 +9,9 @@ Asistente personal para descubrir, evaluar y organizar oportunidades laborales c
 - Filtro geográfico para Costa Rica, LATAM y puestos remotos internacionales compatibles.
 - Priorización de vacantes de 0 a 30 días, sección separada de 31 a 60 días y descarte de resultados con más de 60 días.
 - Puntaje explicable de compatibilidad con el perfil.
-- Acciones para aceptar, guardar o descartar, almacenadas localmente en el navegador.
+- Acceso privado por enlace enviado al correo mediante Supabase Auth.
+- Acciones para aceptar, guardar o descartar, sincronizadas entre dispositivos mediante Supabase.
+- Historial de señales para mejorar gradualmente las recomendaciones sin guardar descripciones completas.
 - Ningún envío automático de postulaciones.
 
 ## Ejecutar en la computadora
@@ -26,6 +28,8 @@ Abre `http://localhost:3000`.
 
 La aplicación funciona solo con Remotive aunque no configures variables. Para activar la búsqueda web amplia, crea una clave de Brave Search y completa `BRAVE_SEARCH_API_KEY` en `.env.local`.
 
+Para activar el acceso privado y la sincronización, completa `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Sin ellas, JobPilot conserva el modo local del navegador.
+
 ## Verificación
 
 ```bash
@@ -35,9 +39,9 @@ pnpm build
 
 ## Próximos módulos
 
-1. Base de datos Supabase y configuración editable del perfil.
+1. Configuración editable del perfil y pesos aprendidos.
 2. Búsqueda programada y eliminación de duplicados persistente.
 3. Extensión de Chrome para autorrelleno asistido, empezando por Workday.
-4. Historial y seguimiento de postulaciones.
+4. Vista completa de seguimiento de postulaciones.
 
 JobPilot nunca debe enviar una postulación, resolver un CAPTCHA ni guardar contraseñas sin la revisión y acción final de la persona usuaria.

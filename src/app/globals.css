@@ -541,6 +541,102 @@ h1 {
   line-height: 1.55;
 }
 
+.account-area {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.sync-chip {
+  padding: 6px 9px;
+  border: 1px solid #cedbd5;
+  border-radius: 999px;
+  color: #54655e;
+  background: #f6faf8;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.sync-chip.saving { color: #825719; background: var(--amber-soft); border-color: #edd59d; }
+.sync-chip.error { color: var(--red); background: var(--red-soft); border-color: #efcecb; }
+.sync-chip.saved { color: var(--green-dark); background: var(--green-soft); border-color: #bddbc9; }
+
+.sign-out-button {
+  border: 0;
+  padding: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 15% 15%, rgba(35, 126, 92, .14), transparent 32%),
+    linear-gradient(145deg, #f8faf8 0%, #edf4f0 100%);
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  padding: 38px;
+  border: 1px solid rgba(18, 72, 53, .14);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 22px 70px rgba(16, 67, 49, .12);
+}
+
+.auth-logo {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 22px;
+  border-radius: 14px;
+  color: #173d30;
+  background: #f3bd55;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.auth-card h1 { margin: 5px 0 10px; font-size: 29px; }
+.auth-card > p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
+
+.auth-form {
+  margin-top: 25px;
+  display: grid;
+  gap: 9px;
+}
+
+.auth-form label { color: #344b42; font-size: 12px; font-weight: 750; }
+.auth-form input {
+  width: 100%;
+  border: 1px solid #cbd8d2;
+  border-radius: 10px;
+  padding: 12px 13px;
+  color: #21362e;
+  background: #fff;
+  font: inherit;
+  outline: none;
+}
+
+.auth-form input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(23, 107, 77, .12); }
+.auth-form .primary-button { width: 100%; margin-top: 5px; }
+
+.auth-message {
+  margin-top: 16px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  color: #38584b;
+  background: var(--green-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 76px minmax(0, 1fr); }
   .sidebar { padding: 24px 12px; }
@@ -570,7 +666,7 @@ h1 {
   .nav-item { display: none; }
   .nav-item.active { display: flex; box-shadow: none; background: rgba(255,255,255,.1); }
   .topbar { height: 58px; padding: 0 16px; }
-  .profile-chip span { display: none; }
+  .profile-chip span, .sync-chip { display: none; }
   .content { padding: 24px 16px 40px; }
   .hero-row { align-items: stretch; flex-direction: column; }
   .primary-button { width: 100%; }
@@ -581,4 +677,5 @@ h1 {
   .score { width: 58px; height: 58px; }
   .job-actions { padding: 11px 16px; flex-wrap: wrap; }
   .job-link { width: 100%; margin: 2px 0 0; text-align: center; }
+  .auth-card { padding: 28px 22px; }
 }
