@@ -1,27 +1,29 @@
 import { searchBrave } from "./sources/brave";
 import { searchRemotive } from "./sources/remotive";
-import type { DiscoveryResponse, JobOpportunity } from "./types";
+import { DEFAULT_SEARCH_PREFERENCES, type DiscoveryResponse, type JobOpportunity, type SearchPreferences } from "./types";
 
-export async function discoverJobs(): Promise<DiscoveryResponse> {
+export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEARCH_PREFERENCES): Promise<DiscoveryResponse> {
   const sources: string[] = [];
   const notices: string[] = [];
   const jobs: JobOpportunity[] = [];
 
-  const tasks: Promise<void>[] = [
-    searchRemotive()
+  const tasks: Promise<void>[] = [];
+
+  if (preferences.enabledSources.remotive) {
+    tasks.push(searchRemotive(preferences)
       .then((results) => {
         jobs.push(...results);
         sources.push("Remotive");
       })
       .catch(() => {
         notices.push("Remotive no respondió esta vez; puedes volver a intentar.");
-      }),
-  ];
+      }));
+  }
 
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (braveKey) {
+  if (braveKey && preferences.enabledSources.brave) {
     tasks.push(
-      searchBrave(braveKey)
+      searchBrave(braveKey, preferences)
         .then((results) => {
           jobs.push(...results);
           sources.push("Búsqueda web");
@@ -30,7 +32,7 @@ export async function discoverJobs(): Promise<DiscoveryResponse> {
           notices.push("La búsqueda web amplia no respondió esta vez.");
         }),
     );
-  } else {
+  } else if (preferences.enabledSources.brave) {
     notices.push("Agrega BRAVE_SEARCH_API_KEY para incluir Workday, Computrabajo, LinkedIn, Indeed, Greenhouse, Lever y más resultados web.");
   }
 
@@ -48,5 +50,6 @@ export async function discoverJobs(): Promise<DiscoveryResponse> {
     searchedAt: new Date().toISOString(),
     sources,
     notices,
+    queryCount: preferences.enabledSources.brave ? 7 : 0,
   };
 }

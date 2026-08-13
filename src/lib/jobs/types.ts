@@ -1,6 +1,29 @@
 export type Freshness = "fresh" | "older" | "unknown" | "stale";
 export type JobDecision = "new" | "accepted" | "saved" | "rejected";
 
+export interface SearchPreferences {
+  targetRoles: string[];
+  skills: string[];
+  minimumScore: number;
+  enabledSources: {
+    brave: boolean;
+    remotive: boolean;
+  };
+}
+
+export const DEFAULT_SEARCH_PREFERENCES: SearchPreferences = {
+  targetRoles: [
+    "Recursos Humanos",
+    "Reclutamiento",
+    "People Operations",
+    "Coordinación de proyectos",
+    "Psicología y programas psicosociales",
+  ],
+  skills: ["Planificación", "Seguimiento", "Logística", "Excel", "Microsoft Office", "Python"],
+  minimumScore: 60,
+  enabledSources: { brave: true, remotive: true },
+};
+
 export interface JobOpportunity {
   id: string;
   source: string;
@@ -23,4 +46,5 @@ export interface DiscoveryResponse {
   searchedAt: string;
   sources: string[];
   notices: string[];
+  queryCount: number;
 }

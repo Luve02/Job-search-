@@ -2,12 +2,15 @@ interface ScoreInput {
   title: string;
   description: string;
   location: string;
+  targetRoles?: string[];
+  profileSkills?: string[];
 }
 
 const roleGroups = [
-  ["human resources", "recursos humanos", "talent acquisition", "recruiter", "people operations", "hr coordinator", "hr assistant"],
-  ["project coordinator", "program coordinator", "project assistant", "operations coordinator", "coordinador de proyecto"],
-  ["psychology", "psicología", "psychosocial", "bienestar", "social program", "community"],
+  ["human resources", "recursos humanos", "talent acquisition", "talento humano", "recruiter", "reclutamiento", "selección", "people operations", "people & culture", "hr coordinator", "hr assistant", "hr generalist", "generalista", "relaciones laborales", "desarrollo organizacional"],
+  ["project coordinator", "program coordinator", "project assistant", "operations coordinator", "coordinador de proyecto", "coordinación de proyectos", "coordinador de programa", "gestor de proyectos", "project management"],
+  ["psychology", "psicología", "psychosocial", "psicosocial", "bienestar", "wellbeing", "social program", "impacto social", "orientador", "counselor"],
+  ["administrative assistant", "asistente administrativo", "office assistant", "operations assistant", "asistente de operaciones", "coordinador administrativo"],
 ];
 
 const skills = [
@@ -17,11 +20,13 @@ const skills = [
 
 const languages = ["spanish", "español", "english", "inglés", "portuguese", "portugués"];
 
-const targetTitlePattern = /\b(human resources|recursos humanos|talent|recruit|recruiter|people operations|people & culture|hr |hr$|project|program|coordinator|coordinador|psych|psic[oó]log|psychosocial|community|social impact|administrative assistant|office assistant|asistente administrativ|operations assistant)\b/i;
+const targetTitlePattern = /\b(human resources|recursos humanos|talent|talento humano|recruit|recruiter|reclut|selecci[oó]n|people operations|people & culture|hr |hr$|generalista|relaciones laborales|desarrollo organizacional|project|proyecto|program|programa|coordinator|coordinador|coordinaci[oó]n|gestor de proyectos|psych|psic[oó]log|psychosocial|psicosocial|bienestar|wellbeing|orientador|counselor|social impact|impacto social|administrative assistant|office assistant|asistente administrativ|operations assistant|asistente de operaciones)\b/i;
 const excessiveSeniorityPattern = /\b(senior|sr\.?|head|director|principal|vice president|vp|chief)\b/i;
 
-export function isTargetTitle(title: string): boolean {
-  return targetTitlePattern.test(title) && !excessiveSeniorityPattern.test(title);
+export function isTargetTitle(title: string, targetRoles: string[] = []): boolean {
+  const normalizedTitle = title.toLowerCase();
+  const customMatch = targetRoles.some((role) => roleKeywords(role).some((keyword) => normalizedTitle.includes(keyword)));
+  return (targetTitlePattern.test(title) || customMatch) && !excessiveSeniorityPattern.test(title);
 }
 
 export function scoreJob(input: ScoreInput): { score: number; reasons: string[] } {
@@ -31,7 +36,8 @@ export function scoreJob(input: ScoreInput): { score: number; reasons: string[] 
   const reasons: string[] = [];
   let score = 22;
 
-  if (isTargetTitle(input.title) || roleGroups.some((group) => group.some((term) => title.includes(term)))) {
+  const preferredRoleMatch = (input.targetRoles ?? []).some((role) => roleKeywords(role).some((keyword) => title.includes(keyword)));
+  if (preferredRoleMatch || isTargetTitle(input.title, input.targetRoles) || roleGroups.some((group) => group.some((term) => title.includes(term)))) {
     score += 35;
     reasons.push("Área profesional compatible");
   } else if (roleGroups.some((group) => group.some((term) => text.includes(term)))) {
@@ -39,7 +45,8 @@ export function scoreJob(input: ScoreInput): { score: number; reasons: string[] 
     reasons.push("Funciones relacionadas");
   }
 
-  const skillMatches = skills.filter((skill) => text.includes(skill)).length;
+  const configuredSkills = [...skills, ...(input.profileSkills ?? []).map((skill) => skill.toLowerCase())];
+  const skillMatches = [...new Set(configuredSkills)].filter((skill) => text.includes(skill)).length;
   if (skillMatches > 0) {
     score += Math.min(20, skillMatches * 5);
     reasons.push(`${skillMatches} habilidad${skillMatches === 1 ? "" : "es"} compatible${skillMatches === 1 ? "" : "s"}`);
@@ -62,4 +69,14 @@ export function scoreJob(input: ScoreInput): { score: number; reasons: string[] 
 
   if (reasons.length === 0) reasons.push("Requiere revisión manual");
   return { score: Math.min(100, score), reasons: reasons.slice(0, 3) };
+}
+
+function roleKeywords(role: string): string[] {
+  const normalized = role.toLowerCase();
+  const mapped = roleGroups.find((group) => group.some((term) => normalized.includes(term) || term.includes(normalized)));
+  if (mapped) return mapped;
+  return normalized
+    .split(/[,/&]|\s+y\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length >= 4);
 }

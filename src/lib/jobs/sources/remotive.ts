@@ -1,7 +1,7 @@
 import { getFreshness } from "../freshness";
 import { isTargetTitle, scoreJob } from "../scoring";
 import { cleanText, stableId } from "../source-utils";
-import type { JobOpportunity } from "../types";
+import type { JobOpportunity, SearchPreferences } from "../types";
 
 interface RemotiveJob {
   id: number;
@@ -22,7 +22,7 @@ interface RemotiveResponse {
 const COMPATIBLE_LOCATIONS = /worldwide|anywhere|latin america|latam|americas|costa rica|central america/i;
 const EXCLUDED_LOCATIONS = /united states only|us only|usa only|canada only|europe only|uk only|eu only/i;
 
-export async function searchRemotive(): Promise<JobOpportunity[]> {
+export async function searchRemotive(preferences: SearchPreferences): Promise<JobOpportunity[]> {
   const response = await fetch("https://remotive.com/api/remote-jobs?limit=100", {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(9_000),
@@ -36,7 +36,7 @@ export async function searchRemotive(): Promise<JobOpportunity[]> {
       const location = job.candidate_required_location || "";
       return COMPATIBLE_LOCATIONS.test(location)
         && !EXCLUDED_LOCATIONS.test(location)
-        && isTargetTitle(job.title);
+        && isTargetTitle(job.title, preferences.targetRoles);
     })
     .map((job) => {
       const description = cleanText(job.description);
@@ -45,6 +45,8 @@ export async function searchRemotive(): Promise<JobOpportunity[]> {
         title: job.title,
         description: description.slice(0, 1_800),
         location: job.candidate_required_location,
+        targetRoles: preferences.targetRoles,
+        profileSkills: preferences.skills,
       });
       return {
         id: stableId("remotive", String(job.id)),
@@ -61,5 +63,5 @@ export async function searchRemotive(): Promise<JobOpportunity[]> {
         decision: "new" as const,
       };
     })
-    .filter((job) => job.freshness !== "stale" && job.score >= 55);
+    .filter((job) => job.freshness !== "stale" && job.score >= Math.max(40, preferences.minimumScore - 15));
 }

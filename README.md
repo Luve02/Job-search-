@@ -12,6 +12,10 @@ Asistente personal para descubrir, evaluar y organizar oportunidades laborales c
 - Acceso privado por enlace enviado al correo mediante Supabase Auth.
 - Acciones para aceptar, guardar o descartar, sincronizadas entre dispositivos mediante Supabase.
 - Historial de señales para mejorar gradualmente las recomendaciones sin guardar descripciones completas.
+- Búsqueda ampliada con consultas separadas para recursos humanos, reclutamiento, proyectos, operaciones, psicología y programas sociales.
+- Dos niveles de resultados: recomendadas y posibles, con puntaje mínimo configurable.
+- Navegación funcional para oportunidades, seguimiento de postulaciones, perfil y fuentes/filtros.
+- Ajuste explicable de hasta ±10 puntos después de acumular varias decisiones.
 - Ningún envío automático de postulaciones.
 
 ## Ejecutar en la computadora
@@ -39,9 +43,8 @@ pnpm build
 
 ## Próximos módulos
 
-1. Configuración editable del perfil y pesos aprendidos.
-2. Búsqueda programada y eliminación de duplicados persistente.
-3. Extensión de Chrome para autorrelleno asistido, empezando por Workday.
-4. Vista completa de seguimiento de postulaciones.
+1. Búsqueda programada y eliminación de duplicados persistente.
+2. Extensión de Chrome para autorrelleno asistido, empezando por Workday.
+3. Panel de métricas sobre entrevistas, respuestas y fuentes más efectivas.
 
 JobPilot nunca debe enviar una postulación, resolver un CAPTCHA ni guardar contraseñas sin la revisión y acción final de la persona usuaria.
