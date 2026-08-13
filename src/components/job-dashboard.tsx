@@ -523,7 +523,7 @@ function OpportunityView({ jobs, notices, filter, minimumScore, counts, loading,
         <Stat label="Guardadas" value={counts.saved} color="#bd791b" />
       </section>
 
-      <div className="notice"><span>●</span><span><strong>Búsqueda ampliada:</strong> hasta siete consultas especializadas; 0–30 días tienen prioridad, 31–60 aparecen aparte y más de 60 se descartan.</span></div>
+      <div className="notice"><span>●</span><span><strong>Búsqueda ampliada y validada:</strong> Brave descubre candidatos en portales y en la web abierta; la IA descarta páginas que no sean vacantes reales y calcula la compatibilidad.</span></div>
       {notices.map((notice) => <div className="notice warning" key={notice}><span>!</span><span>{notice}</span></div>)}
 
       <section className="toolbar">
@@ -605,7 +605,7 @@ function FiltersView({ draft, sources, onChange, onToggleSource, onSave }: { dra
         </div>
         <section className="setting-section sources-section">
           <h2>Fuentes activas</h2>
-          <label className="source-toggle"><input type="checkbox" checked={sources.brave} onChange={() => onToggleSource("brave")} /><span><strong>Búsqueda web Brave</strong><small>Workday, LinkedIn, Indeed, Computrabajo, Greenhouse, Lever y más. Usa hasta siete consultas por búsqueda.</small></span></label>
+          <label className="source-toggle"><input type="checkbox" checked={sources.brave} onChange={() => onToggleSource("brave")} /><span><strong>Brave + validación con IA</strong><small>Busca ampliamente en Workday, LinkedIn, Indeed, Computrabajo, páginas empresariales y más; después la IA elimina foros, noticias y resultados incompatibles.</small></span></label>
           <label className="source-toggle"><input type="checkbox" checked={sources.remotive} onChange={() => onToggleSource("remotive")} /><span><strong>Remotive</strong><small>Fuente directa de puestos remotos internacionales compatibles con LATAM.</small></span></label>
         </section>
         <div className="form-footer"><span>Siempre debe quedar al menos una fuente activa.</span><button className="primary-button">Guardar filtros</button></div>

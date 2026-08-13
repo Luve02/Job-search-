@@ -1,5 +1,5 @@
 import { getFreshness, parseRelativeAge } from "../freshness";
-import { isTargetTitle, scoreJob } from "../scoring";
+import { scoreJob } from "../scoring";
 import { canonicalJobUrl, cleanText, detectSource, stableId } from "../source-utils";
 import type { JobOpportunity, SearchPreferences } from "../types";
 
@@ -14,49 +14,45 @@ interface BraveResponse {
   web?: { results?: BraveResult[] };
 }
 
-interface GeographyMatch {
+export interface BraveSearchResult {
+  jobs: JobOpportunity[];
+  queryCount: number;
+}
+
+interface GeographyEstimate {
   location: string;
   remote: boolean;
 }
 
-const GENERIC_TITLE = /^(empleos?|trabajos?|jobs?|vacantes?|careers?|ofertas?\s+de\s+(empleo|trabajo))\b/i;
-const GENERIC_LISTING = /\b(remote\s+)?(social\s+impact\s+)?jobs?\b|ofertas?\s+de\s+empleo|encuentra\s+ofertas|actualizadas?\s+diariamente/i;
-const EXCLUDED_ROLE = /^community manager\b/i;
-const EDITORIAL_TITLE = /\b(foro|noticias?|opiniones?|reporta|anuncia|crecimiento|avanza|art[ií]culo|blog|ranking|gu[ií]a|revista|informe)\b/i;
-const EDITORIAL_HOST_TOKEN = /(^|[.-])(foro[a-z0-9-]*|news|noticias[a-z0-9-]*|blog|revista)([.-]|$)/i;
-const EDITORIAL_HOSTS = ["medium.com", "reddit.com", "wikipedia.org", "youtube.com"];
-const JOB_PATH = /\/(job|jobs|career|careers|vacancy|vacancies|position|positions|empleo|empleos|trabajo|trabajos|oferta|ofertas|vacante|vacantes|requisition|requisitions|req)(\/|-|_|\?|$)/i;
-const TRUSTED_JOB_HOSTS = [
-  "myworkdayjobs.com", "greenhouse.io", "lever.co", "linkedin.com", "indeed.com",
-  "computrabajo.co.cr", "elempleo.com", "smartrecruiters.com", "ashbyhq.com",
-  "workable.com", "jobvite.com", "bamboohr.com", "successfactors.com",
-  "oraclecloud.com", "icims.com", "jazzhr.com", "personio.com", "recruitee.com",
-];
+const CANDIDATE_LIMIT = 45;
+const BLOCKED_FILE = /\.(pdf|docx?|xlsx?|pptx?|zip|jpg|jpeg|png|gif)(\?|$)/i;
+const BLOCKED_HOSTS = ["youtube.com", "facebook.com", "instagram.com", "tiktok.com", "wikipedia.org"];
 const REMOTE_FOR_CR = /\b(remote|remoto|worldwide|anywhere|latam|latin america|americas|central america)\b/i;
-const COSTA_RICA = /\b(costa rica|san jos[eé]|heredia|alajuela|cartago|escaz[uú]|santa ana)\b/i;
-const FOREIGN_ONLY = /\b(colombia|bogot[aá]|medell[ií]n|cali|venezuela|caracas|m[eé]xico|argentina|chile|per[uú]|ecuador|panam[aá])\b/i;
-const FOREIGN_HOST = /^(co|ve|mx|ar|cl|pe|ec|pa)\./i;
-const GLOBAL_JOB_HOST = /(myworkdayjobs\.com|greenhouse\.io|lever\.co|linkedin\.com|indeed\.com|smartrecruiters\.com|ashbyhq\.com|workable\.com)$/i;
+const COSTA_RICA = /\b(costa rica|san jos[eé]|heredia|alajuela|cartago|escaz[uú]|santa ana|lim[oó]n|guanacaste|puntarenas)\b/i;
+const FOREIGN_LOCATION = /\b(colombia|bogot[aá]|medell[ií]n|cali|venezuela|caracas|m[eé]xico|argentina|chile|per[uú]|ecuador|panam[aá])\b/i;
 
+// Algunas consultas se concentran en portales conocidos y otras recorren la
+// web abierta. La IA recibe los candidatos y decide cuáles sí son vacantes.
 const QUERIES = [
-  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:smartrecruiters.com) ("Costa Rica" OR LATAM) ("human resources" OR recruiter OR "talent acquisition")',
-  '(site:linkedin.com/jobs OR site:indeed.com OR site:computrabajo.co.cr) "Costa Rica" ("recursos humanos" OR reclutamiento OR "talento humano" OR generalista)',
-  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:linkedin.com/jobs) ("Costa Rica" OR remoto OR LATAM) ("project coordinator" OR "program coordinator" OR "operations coordinator")',
-  '(site:linkedin.com/jobs OR site:indeed.com OR site:computrabajo.co.cr OR site:elempleo.com) "Costa Rica" ("coordinador de proyecto" OR "coordinador de programa" OR "asistente de proyecto")',
-  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:smartrecruiters.com OR site:linkedin.com/jobs) ("Costa Rica" OR remoto OR LATAM) (psicólogo OR psicóloga OR "coordinador psicosocial" OR "coordinador de bienestar" OR "coordinador de programas sociales")',
-  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:smartrecruiters.com OR site:linkedin.com/jobs) ("Costa Rica" OR LATAM) ("people operations" OR "people & culture" OR "employee experience" OR "HR assistant")',
+  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:smartrecruiters.com OR site:ashbyhq.com) ("Costa Rica" OR LATAM OR remote) ("human resources" OR recruiter OR "talent acquisition" OR "people operations")',
+  '(site:linkedin.com/jobs OR site:indeed.com OR site:computrabajo.co.cr OR site:elempleo.com) "Costa Rica" ("recursos humanos" OR reclutamiento OR "talento humano" OR generalista OR psicología)',
+  '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:linkedin.com/jobs OR site:workable.com) ("Costa Rica" OR LATAM OR remote) ("project coordinator" OR "program coordinator" OR "operations coordinator" OR "project assistant")',
+  '("Costa Rica" OR "Remote LATAM") ("recursos humanos" OR reclutamiento OR "talent acquisition" OR "people operations") (empleo OR vacante OR hiring OR careers)',
+  '("Costa Rica" OR "Remote LATAM") ("coordinador de proyecto" OR "coordinador de programa" OR "asistente de proyecto" OR "operations assistant") (empleo OR vacante OR hiring)',
+  '("Costa Rica" OR "Remote LATAM") (psicólogo OR psicóloga OR psicosocial OR bienestar OR "programas sociales" OR "impacto social") (empleo OR vacante OR puesto OR hiring)',
+  '("Costa Rica" OR LATAM OR remote) (ONG OR nonprofit OR fundación OR foundation OR development) (coordinator OR coordinador OR assistant OR asistente OR specialist)',
+  '("Costa Rica" OR "Remote LATAM") ("asistente administrativo" OR "administrative assistant" OR "coordinador administrativo" OR "employee experience") (empleo OR job OR vacancy)',
 ];
 
-export async function searchBrave(apiKey: string, preferences: SearchPreferences, offset = 0): Promise<JobOpportunity[]> {
+export async function searchBrave(apiKey: string, preferences: SearchPreferences, offset = 0): Promise<BraveSearchResult> {
   const groups: BraveResponse[] = [];
   let lastError: Error | null = null;
-  const possibleFloor = Math.max(40, preferences.minimumScore - 15);
   const freshness = freshnessRange(60);
+  const queries = buildQueries(preferences.targetRoles);
 
-  // Brave no ofrece CR como mercado de resultados en el parámetro `country`.
-  // Enviamos Costa Rica como ubicación y la incluimos explícitamente en cada
-  // consulta para recibir puestos locales y remotos aptos para LATAM.
-  for (const query of buildQueries(preferences.targetRoles)) {
+  // Brave no ofrece CR como mercado de resultados. Indicamos la ubicación en
+  // los encabezados y en las propias consultas.
+  for (const query of queries) {
     try {
       const params = new URLSearchParams({
         q: query,
@@ -85,27 +81,35 @@ export async function searchBrave(apiKey: string, preferences: SearchPreferences
   }
 
   const unique = new Map<string, JobOpportunity>();
-  for (const payload of groups) {
-    for (const result of payload.web?.results ?? []) {
+  const largestGroup = Math.max(0, ...groups.map((payload) => payload.web?.results?.length ?? 0));
+
+  // Intercalar consultas evita que los primeros 45 candidatos provengan de
+  // una sola fuente o área profesional.
+  for (let resultIndex = 0; resultIndex < largestGroup && unique.size < CANDIDATE_LIMIT; resultIndex += 1) {
+    for (const payload of groups) {
+      const result = payload.web?.results?.[resultIndex];
+      if (!result || !isHttpCandidate(result.url)) continue;
+
+      const canonicalUrl = canonicalJobUrl(result.url);
+      if (unique.has(canonicalUrl)) continue;
+
       const description = cleanText(result.description ?? "");
       const cleanTitle = cleanText(result.title.replace(/\s*[|–-]\s*[^|–-]+$/, ""));
-      const geography = getCompatibleGeography(result.url, `${result.title} ${description}`);
+      if (cleanTitle.length < 6) continue;
 
-      if (!isSpecificJob(result.url, cleanTitle, preferences.targetRoles) || !geography) continue;
-
+      const geography = estimateGeography(canonicalUrl, `${result.title} ${description}`);
       const postedAt = parseRelativeAge(result.age);
-      const freshness = getFreshness(postedAt);
-      const canonicalUrl = canonicalJobUrl(result.url);
+      const freshnessResult = getFreshness(postedAt);
+      if (freshnessResult.freshness === "stale") continue;
+
       const source = detectSource(canonicalUrl);
-      const match = scoreJob({
+      const preliminaryMatch = scoreJob({
         title: cleanTitle,
         description: description.slice(0, 1_800),
         location: geography.location,
         targetRoles: preferences.targetRoles,
         profileSkills: preferences.skills,
       });
-
-      if (match.score < possibleFloor) continue;
 
       unique.set(canonicalUrl, {
         id: stableId(source, canonicalUrl),
@@ -116,14 +120,15 @@ export async function searchBrave(apiKey: string, preferences: SearchPreferences
         url: canonicalUrl,
         description,
         postedAt,
-        ...freshness,
-        ...match,
+        ...freshnessResult,
+        ...preliminaryMatch,
         remote: geography.remote,
         decision: "new",
       });
     }
   }
-  return [...unique.values()].filter((job) => job.freshness !== "stale");
+
+  return { jobs: [...unique.values()], queryCount: queries.length };
 }
 
 function extractCompany(title: string, fallback: string): string {
@@ -131,53 +136,29 @@ function extractCompany(title: string, fallback: string): string {
   return parts.length > 1 ? parts.at(-1) ?? fallback : fallback;
 }
 
-function isSpecificJob(url: string, title: string, targetRoles: string[]): boolean {
-  if (
-    title.length < 8
-    || GENERIC_TITLE.test(title)
-    || GENERIC_LISTING.test(title)
-    || EXCLUDED_ROLE.test(title)
-    || EDITORIAL_TITLE.test(title)
-    || !isTargetTitle(title, targetRoles)
-  ) return false;
-
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "");
-    const genericPaths = new Set(["", "/job", "/jobs", "/empleo", "/empleos", "/trabajo", "/trabajos", "/vacantes", "/careers", "/search"]);
-    if (isEditorialHost(host)) return false;
-    if (genericPaths.has(path) || /\/(search|buscar|ofertas-de-empleo)$/.test(path)) return false;
-    if (/theimpactjob\.com$/.test(host) && /^\/jobs\/(remote|category|search)/.test(path)) return false;
-    if (/trabajo\.org$/.test(host) && !/^\/oferta-/.test(path)) return false;
-    if (!isTrustedJobHost(host) && !JOB_PATH.test(path)) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function buildQueries(targetRoles: string[]): string[] {
   const customTerms = targetRoles
     .map((role) => role.replace(/[^\p{L}\p{N}\s&-]/gu, "").trim())
     .filter((role) => role.length >= 4)
-    .slice(0, 5)
+    .slice(0, 7)
     .map((role) => `"${role}"`);
 
   if (customTerms.length === 0) return QUERIES;
   return [
     ...QUERIES,
-    `(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co OR site:smartrecruiters.com OR site:linkedin.com/jobs OR site:indeed.com) ("Costa Rica" OR remoto OR LATAM) (${customTerms.join(" OR ")})`,
+    `("Costa Rica" OR "Remote LATAM" OR remoto) (${customTerms.join(" OR ")}) (empleo OR vacante OR job OR hiring OR careers)`,
   ];
 }
 
-function isTrustedJobHost(host: string): boolean {
-  return TRUSTED_JOB_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
-}
-
-function isEditorialHost(host: string): boolean {
-  return EDITORIAL_HOST_TOKEN.test(host)
-    || EDITORIAL_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+function isHttpCandidate(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (!/^https?:$/.test(url.protocol) || BLOCKED_FILE.test(url.pathname)) return false;
+    return !BLOCKED_HOSTS.some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
 }
 
 function freshnessRange(days: number): string {
@@ -191,28 +172,16 @@ function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function getCompatibleGeography(url: string, text: string): GeographyMatch | null {
+function estimateGeography(url: string, text: string): GeographyEstimate {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
     const costaRica = COSTA_RICA.test(text) || host.endsWith(".cr") || host.startsWith("cr.");
     const remote = REMOTE_FOR_CR.test(text);
-
-    // Los portales con subdominio de otro país se excluyen aunque aparezcan
-    // accidentalmente en una búsqueda dirigida a Costa Rica.
-    if (FOREIGN_HOST.test(host)) return null;
-    if (FOREIGN_ONLY.test(text) && !costaRica && !remote) return null;
     if (costaRica) return { location: "Costa Rica", remote };
-    if (remote) return { location: "Remoto compatible con CR / LATAM", remote: true };
-
-    // Los ATS globales pueden omitir la ubicación en el fragmento de búsqueda.
-    // Solo se conservan si son publicaciones individuales; quedan marcados
-    // claramente para revisión antes de aceptar.
-    if (GLOBAL_JOB_HOST.test(host)) {
-      return { location: "Ubicación por confirmar", remote: false };
-    }
-
-    return null;
+    if (remote) return { location: "Remoto / LATAM por confirmar", remote: true };
+    if (FOREIGN_LOCATION.test(text)) return { location: "Otra ubicación por revisar", remote: false };
+    return { location: "Ubicación por confirmar", remote: false };
   } catch {
-    return null;
+    return { location: "Ubicación por confirmar", remote: false };
   }
 }

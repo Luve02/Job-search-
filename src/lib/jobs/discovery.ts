@@ -1,5 +1,6 @@
 import { searchBrave } from "./sources/brave";
 import { searchRemotive } from "./sources/remotive";
+import { validateBraveJobsWithLlm } from "./llm-validator";
 import { canonicalJobUrl } from "./source-utils";
 import { DEFAULT_SEARCH_PREFERENCES, type DiscoveryResponse, type JobOpportunity, type SearchPreferences } from "./types";
 
@@ -7,6 +8,7 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
   const sources: string[] = [];
   const notices: string[] = [];
   const jobs: JobOpportunity[] = [];
+  let queryCount = 0;
 
   const tasks: Promise<void>[] = [];
 
@@ -22,17 +24,25 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
   }
 
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
-  if (braveKey && preferences.enabledSources.brave) {
+  const openAIKey = process.env.OPENAI_API_KEY;
+  if (braveKey && openAIKey && preferences.enabledSources.brave) {
     tasks.push(
       searchBrave(braveKey, preferences, searchPage)
-        .then((results) => {
-          jobs.push(...results);
-          sources.push("Búsqueda web");
+        .then(async (result) => {
+          queryCount = result.queryCount;
+          const validation = await validateBraveJobsWithLlm(openAIKey, result.jobs, preferences);
+          jobs.push(...validation.jobs);
+          sources.push("Brave + IA");
+          if (validation.reviewedCount > 0 && validation.jobs.length === 0) {
+            notices.push(`La IA revisó ${validation.reviewedCount} candidatos, pero ninguno tuvo evidencia suficiente para recomendarlo.`);
+          }
         })
         .catch(() => {
-          notices.push("La búsqueda web amplia no respondió esta vez.");
+          notices.push("La búsqueda web o la validación con IA no respondió esta vez.");
         }),
     );
+  } else if (preferences.enabledSources.brave && braveKey && !openAIKey) {
+    notices.push("Agrega OPENAI_API_KEY para que la IA valide los candidatos encontrados por Brave.");
   } else if (preferences.enabledSources.brave) {
     notices.push("Agrega BRAVE_SEARCH_API_KEY para incluir Workday, Computrabajo, LinkedIn, Indeed, Greenhouse, Lever y más resultados web.");
   }
@@ -51,7 +61,7 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
     searchedAt: new Date().toISOString(),
     sources,
     notices,
-    queryCount: preferences.enabledSources.brave ? 7 : 0,
+    queryCount,
     searchPage,
   };
 }
