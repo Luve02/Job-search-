@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   DEFAULT_SEARCH_PREFERENCES,
@@ -10,6 +10,7 @@ import {
   type JobOpportunity,
 } from "@/lib/jobs/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { canonicalJobUrl } from "@/lib/jobs/source-utils";
 
 type View = "opportunities" | "applications" | "profile" | "filters";
 type Filter = "recommended" | "possible" | Freshness | "accepted" | "saved";
@@ -113,6 +114,8 @@ export function JobDashboard() {
   const [searchedAt, setSearchedAt] = useState<string | null>(null);
   const [queryCount, setQueryCount] = useState(0);
   const [syncState, setSyncState] = useState<SyncState>("idle");
+  const searchPageRef = useRef(0);
+  const seenUrlsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!supabase) return;
@@ -142,7 +145,12 @@ export function JobDashboard() {
   }, [supabase]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setSources(readSourceSettings()), 0);
+    const timer = window.setTimeout(() => {
+      setSources(readSourceSettings());
+      const progress = readSearchProgress();
+      searchPageRef.current = progress.page;
+      seenUrlsRef.current = progress.urls;
+    }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -188,11 +196,11 @@ export function JobDashboard() {
 
     const nextSavedJobs = (jobsResult.data ?? []) as SavedJobRecord[];
     const nextApplications = (applicationsResult.data ?? []) as ApplicationRecord[];
-    const decisions = Object.fromEntries(nextSavedJobs.map((job) => [job.url, job.decision]));
+    const decisions = Object.fromEntries(nextSavedJobs.map((job) => [canonicalJobUrl(job.url), job.decision]));
     setSavedJobs(nextSavedJobs);
     setApplications(nextApplications);
     setCloudDecisions(decisions);
-    setJobs((current) => current.map((job) => ({ ...job, decision: decisions[job.url] ?? job.decision })));
+    setJobs((current) => current.map((job) => ({ ...job, decision: decisions[canonicalJobUrl(job.url)] ?? job.decision })));
     setSyncState("saved");
   }, [supabase, user]);
 
@@ -220,6 +228,7 @@ export function JobDashboard() {
     setLoading(true);
     setNotices([]);
     try {
+      const searchPage = searchPageRef.current;
       const response = await fetch("/api/discovery", {
         method: "POST",
         cache: "no-store",
@@ -231,17 +240,31 @@ export function JobDashboard() {
             minimumScore: profile.minimumScore,
             enabledSources: sources,
           },
+          page: searchPage,
         }),
       });
       if (!response.ok) throw new Error("search-failed");
       const data = (await response.json()) as DiscoveryResponse;
       const localDecisions = readDecisions();
       const learnedJobs = data.jobs.map((job) => applyLearnedAdjustment(job, savedJobs));
-      setJobs(learnedJobs.map((job) => ({
+      const previouslyDecided = new Set(savedJobs.map((job) => canonicalJobUrl(job.url)));
+      const unseenJobs = learnedJobs.filter((job) => {
+        const url = canonicalJobUrl(job.url);
+        return !seenUrlsRef.current.has(url) && !previouslyDecided.has(url);
+      });
+      unseenJobs.forEach((job) => seenUrlsRef.current.add(canonicalJobUrl(job.url)));
+      searchPageRef.current = (searchPage + 1) % 10;
+      saveSearchProgress(searchPageRef.current, seenUrlsRef.current);
+      setJobs(unseenJobs.map((job) => ({
         ...job,
-        decision: cloudDecisions[job.url] ?? localDecisions[job.id] ?? "new",
+        decision: cloudDecisions[canonicalJobUrl(job.url)] ?? localDecisions[job.id] ?? "new",
       })));
-      setNotices(data.notices);
+      setNotices([
+        ...data.notices,
+        ...(unseenJobs.length === 0 && data.jobs.length > 0
+          ? ["Esta página no contenía vacantes nuevas. Pulsa buscar otra vez para revisar la siguiente."]
+          : []),
+      ]);
       setSearchedAt(data.searchedAt);
       setQueryCount(data.queryCount);
       setHasSearched(true);
@@ -252,7 +275,7 @@ export function JobDashboard() {
         void supabase.from("search_runs").insert({
           user_id: user.id,
           sources: data.sources,
-          result_count: data.jobs.length,
+          result_count: unseenJobs.length,
           notices: data.notices,
           searched_at: data.searchedAt,
         });
@@ -363,6 +386,8 @@ export function JobDashboard() {
     }
     setProfile(nextProfile);
     setProfileDraft(toDraft(nextProfile));
+    searchPageRef.current = 0;
+    saveSearchProgress(0, seenUrlsRef.current);
     setSyncState("saved");
   }
 
@@ -387,6 +412,8 @@ export function JobDashboard() {
     if (!next.brave && !next.remotive) return;
     setSources(next);
     localStorage.setItem("jobpilot-sources", JSON.stringify(next));
+    searchPageRef.current = 0;
+    saveSearchProgress(0, seenUrlsRef.current);
   }
 
   if (authLoading) {
@@ -711,4 +738,25 @@ function readDecisions(): Record<string, JobDecision> {
   } catch {
     return {};
   }
+}
+
+function readSearchProgress(): { page: number; urls: Set<string> } {
+  try {
+    const page = Number(localStorage.getItem("jobpilot-search-page") ?? "0");
+    const storedUrls = JSON.parse(localStorage.getItem("jobpilot-seen-urls") ?? "[]") as unknown;
+    const urls = Array.isArray(storedUrls)
+      ? storedUrls.filter((value): value is string => typeof value === "string").map(canonicalJobUrl)
+      : [];
+    return {
+      page: Number.isInteger(page) ? Math.min(9, Math.max(0, page)) : 0,
+      urls: new Set(urls),
+    };
+  } catch {
+    return { page: 0, urls: new Set<string>() };
+  }
+}
+
+function saveSearchProgress(page: number, urls: Set<string>): void {
+  localStorage.setItem("jobpilot-search-page", String(page));
+  localStorage.setItem("jobpilot-seen-urls", JSON.stringify([...urls].slice(-1_500)));
 }

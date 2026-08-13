@@ -1,8 +1,9 @@
 import { searchBrave } from "./sources/brave";
 import { searchRemotive } from "./sources/remotive";
+import { canonicalJobUrl } from "./source-utils";
 import { DEFAULT_SEARCH_PREFERENCES, type DiscoveryResponse, type JobOpportunity, type SearchPreferences } from "./types";
 
-export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEARCH_PREFERENCES): Promise<DiscoveryResponse> {
+export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEARCH_PREFERENCES, searchPage = 0): Promise<DiscoveryResponse> {
   const sources: string[] = [];
   const notices: string[] = [];
   const jobs: JobOpportunity[] = [];
@@ -23,7 +24,7 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
   const braveKey = process.env.BRAVE_SEARCH_API_KEY;
   if (braveKey && preferences.enabledSources.brave) {
     tasks.push(
-      searchBrave(braveKey, preferences)
+      searchBrave(braveKey, preferences, searchPage)
         .then((results) => {
           jobs.push(...results);
           sources.push("Búsqueda web");
@@ -38,7 +39,7 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
 
   await Promise.all(tasks);
 
-  const uniqueJobs = [...new Map(jobs.map((job) => [job.url, job])).values()]
+  const uniqueJobs = [...new Map(jobs.map((job) => [canonicalJobUrl(job.url), job])).values()]
     .sort((a, b) => {
       const freshnessRank = { fresh: 0, unknown: 1, older: 2, stale: 3 };
       return freshnessRank[a.freshness] - freshnessRank[b.freshness] || b.score - a.score;
@@ -51,5 +52,6 @@ export async function discoverJobs(preferences: SearchPreferences = DEFAULT_SEAR
     sources,
     notices,
     queryCount: preferences.enabledSources.brave ? 7 : 0,
+    searchPage,
   };
 }

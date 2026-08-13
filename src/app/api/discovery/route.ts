@@ -19,9 +19,10 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const payload = await request.json() as { preferences?: Partial<SearchPreferences> };
+    const payload = await request.json() as { preferences?: Partial<SearchPreferences>; page?: number };
     const preferences = normalizePreferences(payload.preferences);
-    return NextResponse.json(await discoverJobs(preferences), {
+    const searchPage = Number.isInteger(payload.page) ? Math.min(9, Math.max(0, payload.page ?? 0)) : 0;
+    return NextResponse.json(await discoverJobs(preferences, searchPage), {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch {

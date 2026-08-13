@@ -13,6 +13,8 @@ Asistente personal para descubrir, evaluar y organizar oportunidades laborales c
 - Acciones para aceptar, guardar o descartar, sincronizadas entre dispositivos mediante Supabase.
 - Historial de señales para mejorar gradualmente las recomendaciones sin guardar descripciones completas.
 - Búsqueda ampliada con consultas separadas para recursos humanos, reclutamiento, proyectos, operaciones, psicología y programas sociales.
+- Validación estricta de vacantes individuales: excluye foros, noticias, artículos, páginas genéricas y enlaces sin señales de una oferta laboral real.
+- Rotación por páginas de resultados y memoria local de enlaces mostrados para presentar opciones nuevas en cada búsqueda.
 - Dos niveles de resultados: recomendadas y posibles, con puntaje mínimo configurable.
 - Navegación funcional para oportunidades, seguimiento de postulaciones, perfil y fuentes/filtros.
 - Ajuste explicable de hasta ±10 puntos después de acumular varias decisiones.

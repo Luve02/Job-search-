@@ -16,6 +16,22 @@ export function stableId(source: string, value: string): string {
   return `${source.toLowerCase().replace(/\W/g, "-")}-${hash.toString(36)}`;
 }
 
+export function canonicalJobUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_|ref$|trk$|trackingid$|source$)/i.test(key)) {
+        url.searchParams.delete(key);
+      }
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
+}
+
 export function detectSource(url: string): string {
   try {
     const host = new URL(url).hostname.toLowerCase();

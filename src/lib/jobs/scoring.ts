@@ -20,24 +20,25 @@ const skills = [
 
 const languages = ["spanish", "español", "english", "inglés", "portuguese", "portugués"];
 
-const targetTitlePattern = /\b(human resources|recursos humanos|talent|talento humano|recruit|recruiter|reclut|selecci[oó]n|people operations|people & culture|hr |hr$|generalista|relaciones laborales|desarrollo organizacional|project|proyecto|program|programa|coordinator|coordinador|coordinaci[oó]n|gestor de proyectos|psych|psic[oó]log|psychosocial|psicosocial|bienestar|wellbeing|orientador|counselor|social impact|impacto social|administrative assistant|office assistant|asistente administrativ|operations assistant|asistente de operaciones)\b/i;
+const targetDomainPattern = /\b(human resources|recursos humanos|talent acquisition|talento humano|recruit|reclut|selecci[oó]n|people operations|people & culture|employee experience|hr |hr$|generalista|relaciones laborales|desarrollo organizacional|project|proyecto|program|programa|operations|operaciones|psych|psic[oó]log|psychosocial|psicosocial|bienestar|wellbeing|social program|programa social|social impact|impacto social|administration|administraci[oó]n)\b/i;
+const roleAnchorPattern = /\b(assistant|asistente|auxiliar|coordinator|coordinador|analyst|analista|specialist|especialista|recruiter|reclutador|generalist|generalista|psychologist|psic[oó]log[oa]|counselor|orientador|consultant|consultor|officer|manager|gestor|encargado|administrador|administrator|hrbp|human resources|recursos humanos|talent acquisition|people operations|people & culture)\b/i;
 const excessiveSeniorityPattern = /\b(senior|sr\.?|head|director|principal|vice president|vp|chief)\b/i;
 
 export function isTargetTitle(title: string, targetRoles: string[] = []): boolean {
   const normalizedTitle = title.toLowerCase();
-  const customMatch = targetRoles.some((role) => roleKeywords(role).some((keyword) => normalizedTitle.includes(keyword)));
-  return (targetTitlePattern.test(title) || customMatch) && !excessiveSeniorityPattern.test(title);
+  const hasRoleAnchor = roleAnchorPattern.test(title);
+  const customMatch = hasRoleAnchor && targetRoles.some((role) => roleKeywords(role).some((keyword) => normalizedTitle.includes(keyword)));
+  const standardMatch = hasRoleAnchor && targetDomainPattern.test(title);
+  return (standardMatch || customMatch) && !excessiveSeniorityPattern.test(title);
 }
 
 export function scoreJob(input: ScoreInput): { score: number; reasons: string[] } {
-  const title = input.title.toLowerCase();
   const text = `${input.title} ${input.description}`.toLowerCase();
   const location = input.location.toLowerCase();
   const reasons: string[] = [];
   let score = 22;
 
-  const preferredRoleMatch = (input.targetRoles ?? []).some((role) => roleKeywords(role).some((keyword) => title.includes(keyword)));
-  if (preferredRoleMatch || isTargetTitle(input.title, input.targetRoles) || roleGroups.some((group) => group.some((term) => title.includes(term)))) {
+  if (isTargetTitle(input.title, input.targetRoles)) {
     score += 35;
     reasons.push("Área profesional compatible");
   } else if (roleGroups.some((group) => group.some((term) => text.includes(term)))) {

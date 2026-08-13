@@ -47,4 +47,5 @@ export interface DiscoveryResponse {
   sources: string[];
   notices: string[];
   queryCount: number;
+  searchPage: number;
 }
