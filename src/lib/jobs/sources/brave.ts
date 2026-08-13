@@ -1,5 +1,5 @@
 import { getFreshness, parseRelativeAge } from "../freshness";
-import { scoreJob } from "../scoring";
+import { isTargetTitle, scoreJob } from "../scoring";
 import { cleanText, detectSource, stableId } from "../source-utils";
 import type { JobOpportunity } from "../types";
 
@@ -13,6 +13,18 @@ interface BraveResult {
 interface BraveResponse {
   web?: { results?: BraveResult[] };
 }
+
+interface GeographyMatch {
+  location: string;
+  remote: boolean;
+}
+
+const GENERIC_TITLE = /^(empleos?|trabajos?|jobs?|vacantes?|careers?|ofertas?\s+de\s+(empleo|trabajo))\b/i;
+const REMOTE_FOR_CR = /\b(remote|remoto|worldwide|anywhere|latam|latin america|americas|central america)\b/i;
+const COSTA_RICA = /\b(costa rica|san jos[eé]|heredia|alajuela|cartago|escaz[uú]|santa ana)\b/i;
+const FOREIGN_ONLY = /\b(colombia|bogot[aá]|medell[ií]n|cali|venezuela|caracas|m[eé]xico|argentina|chile|per[uú]|ecuador|panam[aá])\b/i;
+const FOREIGN_HOST = /^(co|ve|mx|ar|cl|pe|ec|pa)\./i;
+const GLOBAL_JOB_HOST = /(myworkdayjobs\.com|greenhouse\.io|lever\.co|linkedin\.com|indeed\.com)$/i;
 
 const QUERIES = [
   '(site:myworkdayjobs.com OR site:greenhouse.io OR site:lever.co) ("Costa Rica" OR LATAM) ("human resources" OR recruiter OR "project coordinator")',
@@ -58,26 +70,34 @@ export async function searchBrave(apiKey: string): Promise<JobOpportunity[]> {
   for (const payload of groups) {
     for (const result of payload.web?.results ?? []) {
       const description = cleanText(result.description ?? "");
+      const cleanTitle = cleanText(result.title.replace(/\s*[|–-]\s*[^|–-]+$/, ""));
+      const geography = getCompatibleGeography(result.url, `${result.title} ${description}`);
+
+      if (!isSpecificJob(result.url, cleanTitle) || !geography) continue;
+
       const postedAt = parseRelativeAge(result.age);
       const freshness = getFreshness(postedAt);
       const source = detectSource(result.url);
       const match = scoreJob({
-        title: result.title,
+        title: cleanTitle,
         description: description.slice(0, 1_800),
-        location: "Costa Rica / LATAM",
+        location: geography.location,
       });
+
+      if (match.score < 60) continue;
+
       unique.set(result.url, {
         id: stableId(source, result.url),
         source,
-        title: cleanText(result.title.replace(/\s*[|–-]\s*[^|–-]+$/, "")),
+        title: cleanTitle,
         company: extractCompany(result.title, source),
-        location: "Costa Rica / por confirmar",
+        location: geography.location,
         url: result.url,
         description,
         postedAt,
         ...freshness,
         ...match,
-        remote: /remote|remoto/i.test(`${result.title} ${description}`),
+        remote: geography.remote,
         decision: "new",
       });
     }
@@ -88,4 +108,43 @@ export async function searchBrave(apiKey: string): Promise<JobOpportunity[]> {
 function extractCompany(title: string, fallback: string): string {
   const parts = title.split(/\s+[|–-]\s+/).map((part) => part.trim()).filter(Boolean);
   return parts.length > 1 ? parts.at(-1) ?? fallback : fallback;
+}
+
+function isSpecificJob(url: string, title: string): boolean {
+  if (title.length < 8 || GENERIC_TITLE.test(title) || !isTargetTitle(title)) return false;
+
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase().replace(/\/+$/, "");
+    const genericPaths = new Set(["", "/job", "/jobs", "/empleo", "/empleos", "/trabajo", "/trabajos", "/vacantes", "/careers", "/search"]);
+    return !genericPaths.has(path) && !/\/(search|buscar|ofertas-de-empleo)$/.test(path);
+  } catch {
+    return false;
+  }
+}
+
+function getCompatibleGeography(url: string, text: string): GeographyMatch | null {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    const costaRica = COSTA_RICA.test(text) || host.endsWith(".cr") || host.startsWith("cr.");
+    const remote = REMOTE_FOR_CR.test(text);
+
+    // Los portales con subdominio de otro país se excluyen aunque aparezcan
+    // accidentalmente en una búsqueda dirigida a Costa Rica.
+    if (FOREIGN_HOST.test(host)) return null;
+    if (FOREIGN_ONLY.test(text) && !costaRica && !remote) return null;
+    if (costaRica) return { location: "Costa Rica", remote };
+    if (remote) return { location: "Remoto compatible con CR / LATAM", remote: true };
+
+    // Los ATS globales pueden omitir la ubicación en el fragmento de búsqueda.
+    // Solo se conservan si son publicaciones individuales; quedan marcados
+    // claramente para revisión antes de aceptar.
+    if (GLOBAL_JOB_HOST.test(host)) {
+      return { location: "Ubicación por confirmar", remote: false };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
