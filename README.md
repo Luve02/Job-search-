@@ -16,6 +16,7 @@ Asistente personal para descubrir, evaluar y organizar oportunidades laborales c
 - Búsqueda ampliada con consultas separadas para recursos humanos, reclutamiento, proyectos, operaciones, psicología y programas sociales.
 - Evaluación estructurada de cada candidato mediante Gemini, con indicadores separados de vacante real, relevancia profesional, compatibilidad geográfica, confianza y puntaje.
 - Rotación por páginas de resultados y memoria local de enlaces mostrados para presentar opciones nuevas en cada búsqueda.
+- Validación de enlaces por portal para descartar bancos de empleo y páginas de búsqueda que no abren una vacante específica.
 - Dos niveles de resultados: recomendadas y posibles, con puntaje mínimo configurable.
 - Navegación funcional para oportunidades, seguimiento de postulaciones, perfil y fuentes/filtros.
 - Ajuste explicable de hasta ±10 puntos después de acumular varias decisiones.
